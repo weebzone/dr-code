@@ -4,7 +4,7 @@ FROM codercom/code-server:3.10.2
 # 1) Switch to root to install system packages
 USER root
 
-# 2) Install system dependencies (remove python3-pip; we'll install pip ourselves)
+# 2) Install system dependencies (including distutils & setuptools)
 RUN apt-get update && apt-get install -y \
     curl \
     unzip \
@@ -12,7 +12,9 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libssl-dev \
     libffi-dev \
-    python3
+    python3 \
+    python3-distutils \
+    python3-setuptools
 
 # 3) Alias python -> python3
 RUN ln -sf /usr/bin/python3 /usr/bin/python
@@ -23,7 +25,7 @@ RUN curl -sS https://bootstrap.pypa.io/pip/3.7/get-pip.py | python3
 # 5) Ensure pip3 is on PATH and symlink pip -> pip3
 RUN ln -sf /usr/local/bin/pip3 /usr/local/bin/pip
 
-# 6) Create NVM_DIR and chown
+# 6) Prepare NVM directory
 RUN mkdir -p /home/coder/.nvm && chown -R coder:coder /home/coder/.nvm
 
 # 7) Install Node.js via NVM as the coder user
@@ -39,24 +41,22 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | b
     echo "export NVM_DIR=\"$NVM_DIR\"" >> ~/.bashrc && \
     echo "[ -s \"$NVM_DIR/nvm.sh\" ] && \. \"$NVM_DIR/nvm.sh\"" >> ~/.bashrc
 
-# 8) Bring back your existing steps…
+# 8) Back to root to install rclone
+USER root
+RUN curl https://rclone.org/install.sh | bash
+
+# 9) Copy rclone tasks and fix permissions
+COPY deploy-container/rclone-tasks.json /tmp/rclone-tasks.json
+RUN chown -R coder:coder /home/coder/.local
+
+# 10) Switch back to coder for VS Code settings and entrypoint
+USER coder
 
 # Apply VS Code settings
 COPY deploy-container/settings.json .local/share/code-server/User/settings.json
 
-# Use bash shell
+# Use bash
 ENV SHELL=/bin/bash
-
-# Install rclone
-USER root
-RUN curl https://rclone.org/install.sh | bash
-COPY deploy-container/rclone-tasks.json /tmp/rclone-tasks.json
-RUN chown -R coder:coder /home/coder/.local
-
-# Switch back to coder
-USER coder
-
-# Set port
 ENV PORT=8080
 
 # Custom entrypoint
