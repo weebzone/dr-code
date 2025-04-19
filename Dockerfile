@@ -1,10 +1,10 @@
 # Start from the code-server Debian base image
 FROM codercom/code-server:3.10.2
 
-# Switch to root to install system packages
+# 1) Switch to root to install system packages
 USER root
 
-# Install required packages
+# 2) Install system dependencies (remove python3-pip; we'll install pip ourselves)
 RUN apt-get update && apt-get install -y \
     curl \
     unzip \
@@ -12,30 +12,34 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libssl-dev \
     libffi-dev \
-    python3 \
-    python3-pip \
-    sudo
+    python3
 
-# Optional: alias `python` to `python3`
-RUN ln -s /usr/bin/python3 /usr/bin/python
+# 3) Alias python -> python3
+RUN ln -sf /usr/bin/python3 /usr/bin/python
 
-# Create the NVM_DIR for coder user
+# 4) Install pip for Python 3.7 (uses the 3.7‑specific installer)
+RUN curl -sS https://bootstrap.pypa.io/pip/3.7/get-pip.py | python3
+
+# 5) Ensure pip3 is on PATH and symlink pip -> pip3
+RUN ln -sf /usr/local/bin/pip3 /usr/local/bin/pip
+
+# 6) Create NVM_DIR and chown
 RUN mkdir -p /home/coder/.nvm && chown -R coder:coder /home/coder/.nvm
 
-# Switch to coder user for NVM/Node installation
+# 7) Install Node.js via NVM as the coder user
 USER coder
 ENV NVM_DIR=/home/coder/.nvm
 ENV NODE_VERSION=18.18.2
 ENV PATH=$NVM_DIR/versions/node/v$NODE_VERSION/bin:$PATH
 
-# Install NVM and Node.js
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && \
     . "$NVM_DIR/nvm.sh" && \
     nvm install $NODE_VERSION && \
     nvm alias default $NODE_VERSION && \
-    nvm use default && \
     echo "export NVM_DIR=\"$NVM_DIR\"" >> ~/.bashrc && \
     echo "[ -s \"$NVM_DIR/nvm.sh\" ] && \. \"$NVM_DIR/nvm.sh\"" >> ~/.bashrc
+
+# 8) Bring back your existing steps…
 
 # Apply VS Code settings
 COPY deploy-container/settings.json .local/share/code-server/User/settings.json
@@ -55,6 +59,6 @@ USER coder
 # Set port
 ENV PORT=8080
 
-# Use our custom entrypoint script
+# Custom entrypoint
 COPY deploy-container/entrypoint.sh /usr/bin/deploy-container-entrypoint.sh
 ENTRYPOINT ["/usr/bin/deploy-container-entrypoint.sh"]
